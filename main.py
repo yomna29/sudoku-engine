@@ -1,5 +1,7 @@
 import random
 import time
+
+from colorama import Fore, Style
 class SudokuGame:
     def __init__(self, board):
         self.board = board
@@ -157,17 +159,96 @@ class BacktrackingSolver:
         return True
 
 
-class Arc_consistency:
+class ArcConsistency:
+    def __init__(self, grid):
+        self.grid = grid
+        self.variables = {}
+        self.arcs = []
+
     def represent_as_CSP(self):
-        pass
+        """Represent Sudoku grid as CSP variables with domains."""
+        self.variables = {
+            (row, col): {self.grid[row][col]} if self.grid[row][col] != 0 else set(range(1, 10))
+            for row in range(9) for col in range(9)
+        }
+
+
     def define_arcs(self):
-        pass
+        """Define arcs for Sudoku (row, column, and box constraints)."""
+        for row in range(9):
+            for col in range(9):
+                if self.grid[row][col] == 0:
+                    # Row constraints
+                    for i in range(9):
+                        if i != col:
+                            self.arcs.append(((row, col), (row, i)))  # Row constraint
+                            print(f"{Fore.RED}Row Arc: {((row, col), (row, i))}{Style.RESET_ALL}")
+                    
+                    # Column constraints
+                    for i in range(9):
+                        if i != row:
+                            self.arcs.append(((row, col), (i, col)))  # Column constraint
+                            print(f"{Fore.BLUE}Column Arc: {((row, col), (i, col))}{Style.RESET_ALL}")
+                    # Box constraints
+                    box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+                    for r in range(box_row, box_row + 3):
+                        for c in range(box_col, box_col + 3):
+                            if (r, c) != (row, col):
+                                self.arcs.append(((row, col), (r, c)))  # Box constraint
+                                print(f"{Fore.GREEN}Box Arc: {((row, col), (r, c))}{Style.RESET_ALL}")
+
+
     def initial_domain_reduction(self):
-        pass
+        """Reduce domains based on initial grid values."""
+        for (row, col), domain in self.variables.items():
+            if len(domain) == 1:
+                value = next(iter(domain))
+                for neighbor in self.get_neighbors(row, col):
+                    self.variables[neighbor].discard(value)
+
     def apply_arc_consistency(self):
-        pass
+        """Apply arc consistency algorithm (AC-3)."""
+        queue = self.arcs[:]
+        while queue:
+            (x1, x2) = queue.pop(0)
+            if self.revise(x1, x2):
+                if len(self.variables[x1]) == 0:
+                    return False  # Failure: domain wiped out
+                for neighbor in self.get_neighbors(*x1):
+                    if neighbor != x2:
+                        queue.append((neighbor, x1))
+        return True
+
+    def revise(self, x1, x2):
+        """Revise the domain of x1 based on x2."""
+        revised = False
+        for value in list(self.variables[x1]):
+            if all(value == val for val in self.variables[x2]):
+                self.variables[x1].remove(value)
+                revised = True
+        return revised
+
     def update_sudoku_grid(self):
-        pass
+        """Update the grid with reduced domains."""
+        for (row, col), domain in self.variables.items():
+            if len(domain) == 1:
+                self.grid[row][col] = next(iter(domain))
+
+    def get_neighbors(self, row, col):
+        """Get all neighboring cells of (row, col)."""
+        neighbors = set()
+        for i in range(9):
+            if i != col:
+                neighbors.add((row, i))  # Row neighbors
+            if i != row:
+                neighbors.add((i, col))  # Column neighbors
+        box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+        for r in range(box_row, box_row + 3):
+            for c in range(box_col, box_col + 3):
+                if (r, c) != (row, col):
+                    neighbors.add((r, c))  # Box neighbors
+        return neighbors
+
 
 # Example Usage
 if __name__ == "__main__":
@@ -186,18 +267,52 @@ if __name__ == "__main__":
     game = SudokuGame(board)
     solver = BacktrackingSolver(game)
 
+    arc_consistency = ArcConsistency(board)
+    
+
+
     print("Initial Sudoku:")
     game.print_board()
+    
+    arc_consistency.represent_as_CSP()
+    print("\nSudoku represented as CSP variables with domains:")
+    for key, value in arc_consistency.variables.items():
+        print(f"Cell {key}: {value}")
 
-    print("\nValidating input...")
-    if solver.validate_input():
-        print("The input puzzle is solvable.")
-    else:
-        print("The input puzzle is not solvable.")
 
-    print("\nGenerating a random puzzle...")
-    if solver. random_board_generator(clues=25):
-        print("Generated Random Puzzle:")
-        game.print_board()
-    else:
-        print("Failed to generate a random puzzle.")
+
+    print("\nDefined Arcs (constraints between cells):")
+
+    arc_consistency.define_arcs()
+    # for arc in arc_consistency.arcs:
+    #     print(f"Arc: {arc}")
+
+    arc_consistency.initial_domain_reduction()
+    print("\nDomains after initial reduction based on grid values:")
+    for key, value in arc_consistency.variables.items():
+        print(f"Cell {key}: {value}")
+
+    arc_consistency.apply_arc_consistency()
+    print("\nDomains after applying arc consistency (AC-3):")
+    for key, value in arc_consistency.variables.items():
+        print(f"Cell {key}: {value}")
+
+    arc_consistency.update_sudoku_grid()
+    print("\nUpdated Sudoku Grid after applying arc consistency:")
+    game.print_board()
+
+
+    # print("\nValidating input...")
+    # if solver.validate_input():
+    #     print("The input puzzle is solvable.")
+    # else:
+    #     print("The input puzzle is not solvable.")
+
+    # print("\nGenerating a random puzzle...")
+    # if solver. random_board_generator(clues=25):
+    #     print("Generated Random Puzzle:")
+    #     game.print_board()
+    # else:
+    #     print("Failed to generate a random puzzle.")
+
+    
