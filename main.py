@@ -3,6 +3,7 @@ import sys
 from pygame.locals import *
 import random
 import time
+from colorama import Fore, Style
 class SudokuGame:
     def __init__(self, board):
         # Flatten the 2D board into a 1D array
@@ -90,11 +91,9 @@ class SudokuGame:
                 print(self.board[index] if self.board[index] != 0 else ".", end=" ")
             print()
 
-
 class BacktrackingSolver:
-    def __init__(self, csp,game):
-        self.csp = csp
-        self.game=game
+    def __init__(self, game):
+        self.game = game
 
     def backtracking_search(self):
         return self.backtrack({})  # Start with an empty assignment
@@ -133,19 +132,6 @@ class BacktrackingSolver:
         index = row * 9 + col
         return [num for num in range(1, 10) if self.game.is_valid_insertion(index, num)]
 
-    def select_unassigned_variable(self, assignment):
-        for row in range(9):
-            for col in range(9):
-                index = row * 9 + col
-                if (row, col) not in assignment and self.game.board[index] == 0:
-                    return (row, col)
-        return None
-
-    def order_domain_values(self, var, assignment):
-        row, col = var
-        index = row * 9 + col
-        return [num for num in range(1, 10) if self.game.is_valid_insertion(index, num)]
-
     def is_consistent(self, var, value, assignment):
         row, col = var
         index = row * 9 + col
@@ -154,14 +140,14 @@ class BacktrackingSolver:
     def validate_input(self):
         start_time = time.time()
         original_board = self.game.board[:]
-        solvable = bool(self.solve())
+        solvable = bool(self.backtracking_search())
         self.game.board = original_board
         end_time = time.time()
         print(f"Validation completed in {end_time - start_time:.6f} seconds.")
         return solvable
 
     def random_board_generator(self, clues):
-        if not self.solve():
+        if not self.backtracking_search():
             return False
 
         indices_to_be_filled = list(range(81))
@@ -173,50 +159,105 @@ class BacktrackingSolver:
             num = self.game.board[index]
             self.game.board[index] = 0
             self.game._remove_from_masks(index, num)
-            self.game._remove_from_masks(index, num)
 
         return True
 
-    def create_easy_board(self,clues):
+    def create_easy_board(self, clues):
         return self.random_board_generator(36)
+
     def create_intermediate_board(self):
-        return  self.random_board_generator(27)
+        return self.random_board_generator(27)
+
     def create_hard_board(self):
         return self.random_board_generator(19)
 
-
-class arc_consistency:
-    def __init__(self,variables,domains,constraints):
-        self.variables=variables
-        self.domains=domains
-        self.constraints=constraints
+class ArcConsistency:
+    def __init__(self, grid):
+        self.grid = grid
+        self.variables = {}
+        self.arcs = []
 
     def represent_as_CSP(self):
-
-        variables = [(row, col) for row in range(9) for col in range(9)]
-        domains = {}
-
-        for row, col in variables:
-            index = row * 9 + col
-            if self.game.board[index] != 0:
-                # Pre-filled cell, domain is the single value
-                domains[(row, col)] = {self.game.board[index]}
-            else:
-                domains[(row, col)] = {
-                    num for num in range(1, 10) if self.game.is_valid_insertion(index, num)
-                }
-
-        return variables, domains
+        """Represent Sudoku grid as CSP variables with domains."""
+        self.variables = {
+            (row, col): {self.grid[row][col]} if self.grid[row][col] != 0 else set(range(1, 10))
+            for row in range(9) for col in range(9)
+        }
 
     def define_arcs(self):
-        pass
-    def initial_domain_reduction(self):
-        pass
-    def apply_arc_consistency(self):
-        pass
-    def update_sudoku_grid(self):
-        pass
+        """Define arcs for Sudoku (row, column, and box constraints)."""
+        for row in range(9):
+            for col in range(9):
+                if self.grid[row][col] == 0:
+                    # Row constraints
+                    for i in range(9):
+                        if i != col:
+                            self.arcs.append(((row, col), (row, i)))  # Row constraint
+                            print(f"{Fore.RED}Row Arc: {((row, col), (row, i))}{Style.RESET_ALL}")
 
+                    # Column constraints
+                    for i in range(9):
+                        if i != row:
+                            self.arcs.append(((row, col), (i, col)))  # Column constraint
+                            print(f"{Fore.BLUE}Column Arc: {((row, col), (i, col))}{Style.RESET_ALL}")
+                    # Box constraints
+                    box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+                    for r in range(box_row, box_row + 3):
+                        for c in range(box_col, box_col + 3):
+                            if (r, c) != (row, col):
+                                self.arcs.append(((row, col), (r, c)))  # Box constraint
+                                print(f"{Fore.GREEN}Box Arc: {((row, col), (r, c))}{Style.RESET_ALL}")
+
+    def initial_domain_reduction(self):
+        """Reduce domains based on initial grid values."""
+        for (row, col), domain in self.variables.items():
+            if len(domain) == 1:
+                value = next(iter(domain))
+                for neighbor in self.get_neighbors(row, col):
+                    self.variables[neighbor].discard(value)
+
+    def apply_arc_consistency(self):
+        """Apply arc consistency algorithm (AC-3)."""
+        queue = self.arcs[:]
+        while queue:
+            (x1, x2) = queue.pop(0)
+            if self.revise(x1, x2):
+                if len(self.variables[x1]) == 0:
+                    return False  # Failure: domain wiped out
+                for neighbor in self.get_neighbors(*x1):
+                    if neighbor != x2:
+                        queue.append((neighbor, x1))
+        return True
+
+    def revise(self, x1, x2):
+        """Revise the domain of x1 based on x2."""
+        revised = False
+        for value in list(self.variables[x1]):
+            if all(value == val for val in self.variables[x2]):
+                self.variables[x1].remove(value)
+                revised = True
+        return revised
+
+    def update_sudoku_grid(self):
+        """Update the grid with reduced domains."""
+        for (row, col), domain in self.variables.items():
+            if len(domain) == 1:
+                self.grid[row][col] = next(iter(domain))
+
+    def get_neighbors(self, row, col):
+        """Get all neighboring cells of (row, col)."""
+        neighbors = set()
+        for i in range(9):
+            if i != col:
+                neighbors.add((row, i))  # Row neighbors
+            if i != row:
+                neighbors.add((i, col))  # Column neighbors
+        box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+        for r in range(box_row, box_row + 3):
+            for c in range(box_col, box_col + 3):
+                if (r, c) != (row, col):
+                    neighbors.add((r, c))  # Box neighbors
+        return neighbors
 
 # Initialize Pygame
 pygame.init()
@@ -315,10 +356,9 @@ class SudokuGUI:
 
     def solve_puzzle(self):
         """Solve the puzzle."""
-        self.solver.solve()
+        self.solver.backtracking_search()
         self.board = self.game.board[:]
         self.invalid_cells = set()  # Clear invalid cells after solving
-
     def draw_buttons(self):
         """Draw buttons on the screen."""
         if self.show_solve_button:
