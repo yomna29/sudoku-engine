@@ -26,6 +26,18 @@ pygame.display.set_caption("Sudoku Solver: Enhanced GUI")
 class SudokuGame:
     def __init__(self):
         self.board = [0] * 81
+        self.variables = {}  # Initialize the variables attribute
+
+        # Initialize the domains for each cell
+        for row in range(9):
+            for col in range(9):
+                index = self.get_index(row, col)
+                if self.board[index] == 0:
+                    self.variables[(row, col)] = set(range(1, 10))  # Possible values for empty cells
+                else:
+                    self.variables[(row, col)] = {self.board[index]}  # Pre-filled cells
+
+        
 
     def get_index(self, row, col):
         return row * 9 + col
@@ -51,10 +63,35 @@ class SudokuGame:
 
     def load_board(self, board):
         self.board = board
+    def forward_check(self, index, num):
+        row, col = self.get_row_col(index)
+        # Check all cells in the same row, column, and box
+        for i in range(9):
+            # Check row
+            if i != col:
+                self.variables[(row, i)].discard(num)  # Remove num from row neighbors
+            # Check column
+            if i != row:
+                self.variables[(i, col)].discard(num)  # Remove num from column neighbors
 
+        # Check 3x3 box
+         box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+         for r in range(box_row, box_row + 3):
+         for c in range(box_col, box_col + 3):
+                if (r, c) != (row, col):
+                    self.variables[(r, c)].discard(num)  # Remove num from box neighbors
+
+       # Check for empty domains
+         for (r, c), domain in self.variables.items():
+             if len(domain) == 0:
+                 return False  # Inconsistent assignment
+         return True  # Consistent assignment  
     def insert_number(self, index, num):
         if self.is_valid_insertion(index, num):
             self.board[index] = num
+            if not self.forward_check(index, num):  # Apply forward checking
+                self.board[index] = 0  # Undo the insertion if forward check fails
+                return False
             return True
         return False
 
