@@ -52,7 +52,9 @@ if inferences # failure then
 add inferences to assignment
 ```
 - do recurrence 
+``` python
 result = BACKTRACK(assignment, csp)
 if result # failure then return result
 remove {var = value} and inferences from assignment
 return failure
+```
