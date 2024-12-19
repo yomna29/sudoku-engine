@@ -398,7 +398,7 @@ def main():
                     if not arc_consistency_solver.apply_arc_consistency():
                         print("this board has no solution")
                         break
-                    return solver.solve()
+                    solver.solve()
                     gui.draw_numbers()  # Redraw numbers to reflect the solved state
                 else:
                     gui.select_cell(event.pos)
